@@ -404,6 +404,690 @@
         .btn-password-cancel { background: #eef5ea; color: #2c5e45; border: 1px solid #c8dbc0; padding: 12px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; }
         .btn-password-cancel:hover { background: #e2ecd9; transform: scale(1.02); }
         .btn-json { background: #2e8b57; color: white; border: none; padding: 5px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+
+/* ============================================================ */
+/* ========== MEJORAS SOLO PARA PANTALLA ====================== */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    .app-container {
+        padding: 12px;
+    }
+    
+    .header-top {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .logo-header img {
+        height: 40px;
+    }
+    
+    .domicilio-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .grid-4cols {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .docs-checkbox-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .header-table-section {
+        overflow-x: auto;
+    }
+    
+    .info-grid-table {
+        min-width: 500px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .app-container {
+        padding: 8px;
+    }
+    
+    .domicilio-grid,
+    .grid-4cols,
+    .docs-checkbox-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .header-top {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .title-header {
+        text-align: center;
+        width: 100%;
+    }
+}
+
+/* Input del título responsivo (solo pantalla) */
+@media screen {
+    #docTitleInput {
+        width: 100%;
+        min-width: 200px;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+}
+
+/* ============================================================ */
+/* ========== PESTAÑAS RESPONSIVE ============================= */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    .tabs {
+        flex-wrap: wrap;
+        gap: 6px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+    
+    .tab-btn {
+        padding: 8px 14px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+        border-radius: 20px;
+    }
+    
+    .tab-btn i {
+        margin-right: 4px;
+        font-size: 0.7rem;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .tabs {
+        gap: 4px;
+    }
+    
+    .tab-btn {
+        padding: 6px 10px;
+        font-size: 0.65rem;
+    }
+    
+    .tab-btn i {
+        font-size: 0.6rem;
+        margin-right: 3px;
+    }
+}
+
+/* ============================================================ */
+/* ========== PESTAÑAS CENTRADAS - VERSIÓN BOTONES ============ */
+/* ============================================================ */
+@media screen {
+    .tabs {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+        flex: 0 1 auto;
+        min-width: 130px;
+        text-align: center;
+        background: #f0f7ec;
+        border: 1px solid #c8dbc0;
+        padding: 10px 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 40px;
+        transition: all 0.2s;
+        color: #3a6b52;
+        white-space: nowrap;
+    }
+    
+    .tab-btn i {
+        margin-right: 8px;
+    }
+    
+    .tab-btn.active {
+        background: #1f5e3f;
+        color: white;
+        border-color: #1f5e3f;
+    }
+    
+    .tab-btn:hover:not(.active) {
+        background: #e2ecd9;
+        transform: translateY(-2px);
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .tabs {
+        gap: 8px;
+    }
+    
+    .tab-btn {
+        min-width: 110px;
+        padding: 8px 14px;
+        font-size: 0.75rem;
+    }
+}
+
+@media screen and (max-width: 550px) {
+    .tabs {
+        gap: 6px;
+    }
+    
+    .tab-btn {
+        min-width: auto;
+        padding: 6px 12px;
+        font-size: 0.65rem;
+        border-radius: 30px;
+    }
+    
+    .tab-btn i {
+        font-size: 0.6rem;
+        margin-right: 4px;
+    }
+}
+
+/* ============================================================ */
+/* ========== CONTENIDO DE PESTAÑAS RESPONSIVE ================ */
+/* ============================================================ */
+
+/* Tarjetas y contenedores */
+@media screen and (max-width: 768px) {
+    .form-card {
+        border-radius: 8px;
+    }
+    
+    .form-body {
+        padding: 16px;
+    }
+    
+    .section {
+        border-radius: 8px;
+    }
+    
+    .section-title {
+        padding: 8px 14px;
+        font-size: 0.8rem;
+    }
+    
+    .section-content {
+        padding: 14px;
+    }
+    
+    .subsection-title {
+        font-size: 0.75rem;
+        padding: 4px 10px;
+    }
+    
+    /* Campos de formulario */
+    .field-group label {
+        font-size: 0.7rem;
+    }
+    
+    input, select, textarea {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+    
+    /* Grids */
+    .form-grid {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 12px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .form-body {
+        padding: 12px;
+    }
+    
+    .section-title {
+        padding: 6px 12px;
+        font-size: 0.75rem;
+    }
+    
+    .section-title i {
+        font-size: 0.8rem;
+    }
+    
+    .section-content {
+        padding: 10px;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .field-group label {
+        font-size: 0.65rem;
+    }
+    
+    input, select, textarea {
+        padding: 5px 8px;
+        font-size: 0.7rem;
+    }
+}
+
+/* ============================================================ */
+/* ========== LISTAS DE REGISTROS RESPONSIVE ================== */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    .saved-list {
+        padding: 12px;
+    }
+    
+    .record-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+    }
+    
+    .record-info h4 {
+        font-size: 0.8rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    
+    .record-info p {
+        font-size: 0.65rem;
+    }
+    
+    .record-actions {
+        width: 100%;
+        display: flex;
+        justify-content: flex-end;
+    }
+    
+    .badge {
+        font-size: 0.6rem;
+        padding: 2px 6px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .record-item {
+        padding: 8px 10px;
+    }
+    
+    .record-info h4 {
+        font-size: 0.75rem;
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .record-info h4 .badge {
+        display: inline-block;
+        width: fit-content;
+    }
+    
+    .empty-message {
+        padding: 30px 20px;
+        font-size: 0.8rem;
+    }
+    
+    .empty-message i {
+        font-size: 2rem;
+    }
+}
+
+/* ============================================================ */
+/* ========== BOTONES RESPONSIVE ============================== */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    .action-buttons {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+        padding: 8px 16px;
+        font-size: 0.75rem;
+    }
+    
+    .btn-pdf {
+        width: 100%;
+        justify-content: center;
+        padding: 8px 16px;
+        font-size: 0.75rem;
+    }
+    
+    .pdf-button-container {
+        justify-content: center;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .btn, .btn-pdf {
+        padding: 6px 12px;
+        font-size: 0.7rem;
+    }
+}
+
+/* ============================================================ */
+/* ========== FILTROS RESPONSIVE ============================== */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    .filters-container {
+        padding: 12px;
+    }
+    
+    .filters-title {
+        font-size: 0.8rem;
+        margin-bottom: 10px;
+    }
+    
+    .filter-group label {
+        font-size: 0.7rem;
+    }
+    
+    .filter-group select {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+    
+    .btn-clear-filters {
+        padding: 6px 12px;
+        font-size: 0.7rem;
+    }
+}
+
+/* ============================================================ */
+/* ========== MODALES RESPONSIVE ============================== */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    .profile-modal {
+        width: 90%;
+        padding: 20px;
+        margin: 0 10px;
+    }
+    
+    .profile-modal h2 {
+        font-size: 1.1rem;
+    }
+    
+    .profile-select {
+        padding: 10px 35px 10px 12px;
+        font-size: 0.85rem;
+    }
+    
+    .modal-acciones {
+        width: 90%;
+        padding: 20px;
+        margin: 0 10px;
+    }
+    
+    .modal-acciones h3 {
+        font-size: 0.9rem;
+    }
+    
+    .modal-buttons {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .btn-modal {
+        justify-content: center;
+        width: 100%;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .profile-modal {
+        padding: 15px;
+    }
+    
+    .profile-modal h2 {
+        font-size: 1rem;
+    }
+    
+    .profile-select {
+        font-size: 0.8rem;
+    }
+    
+    .btn-password, .btn-password-cancel {
+        padding: 8px 12px;
+        font-size: 0.75rem;
+    }
+}
+
+/* ============================================================ */
+/* ========== FOOTER RESPONSIVE =============================== */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    footer {
+        margin-top: 20px;
+        padding: 12px;
+    }
+    
+    footer div[style*="display: flex"] {
+        gap: 8px !important;
+    }
+    
+    footer img {
+        height: 18px !important;
+    }
+    
+    footer .divider {
+        height: 16px !important;
+    }
+    
+    footer span {
+        font-size: 0.45rem !important;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    footer {
+        padding: 8px;
+    }
+    
+    footer div[style*="display: flex"] {
+        gap: 6px !important;
+        flex-wrap: wrap !important;
+    }
+    
+    footer img {
+        height: 14px !important;
+    }
+    
+    footer .divider {
+        height: 12px !important;
+    }
+    
+    footer span {
+        font-size: 0.4rem !important;
+    }
+}
+
+/* ============================================================ */
+/* ========== INDICADOR DE PERFIL RESPONSIVE ================== */
+/* ============================================================ */
+@media screen and (max-width: 768px) {
+    .perfil-activo {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+        text-align: center;
+        padding: 10px;
+    }
+    
+    .perfil-activo > div {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .btn-cambiar-perfil, .btn-json {
+        font-size: 0.65rem;
+        padding: 4px 10px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .perfil-activo {
+        font-size: 0.7rem;
+    }
+    
+    .btn-cambiar-perfil, .btn-json {
+        font-size: 0.6rem;
+        padding: 3px 8px;
+    }
+}
+
+/* ============================================================ */
+/* ========== CHECKBOXES VALIDACIÓN PRELIMINAR ================= */
+/* ============================================================ */
+@media screen {
+    .checkbox-grid-validation {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px 20px;
+        width: 100%;
+    }
+    
+    .checkbox-grid-validation label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: normal;
+        cursor: pointer;
+        padding: 4px 0;
+        font-size: 0.8rem;
+        white-space: normal;
+        word-break: break-word;
+        line-height: 1.3;
+    }
+    
+    .checkbox-grid-validation input[type="checkbox"] {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        cursor: pointer;
+    }
+}
+
+/* Responsive para tablets */
+@media screen and (max-width: 900px) {
+    .checkbox-grid-validation {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px 16px;
+    }
+    
+    .checkbox-grid-validation label {
+        font-size: 0.75rem;
+        gap: 6px;
+    }
+}
+
+/* Responsive para móviles */
+@media screen and (max-width: 600px) {
+    .checkbox-grid-validation {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .checkbox-grid-validation label {
+        font-size: 0.7rem;
+        padding: 6px 0;
+        background: #f8fdf4;
+        border-radius: 8px;
+        padding: 8px 12px;
+        border: 1px solid #e2ecd9;
+    }
+    
+    .checkbox-grid-validation input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+    }
+}
+
+/* Para móviles muy pequeños */
+@media screen and (max-width: 380px) {
+    .checkbox-grid-validation label {
+        font-size: 0.65rem;
+        padding: 6px 10px;
+    }
+}
+
+/* ============================================================ */
+/* ========== CHECKBOXES DOCUMENTACIÓN ANEXADA ================= */
+/* ============================================================ */
+@media screen {
+    .docs-checkbox-container,
+    .docs-checkbox-row2 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px 20px;
+        width: 100%;
+    }
+    
+    .docs-checkbox-container .checkbox-item,
+    .docs-checkbox-row2 .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: normal;
+        cursor: pointer;
+        padding: 4px 0;
+        font-size: 0.8rem;
+        white-space: normal;
+        word-break: break-word;
+        line-height: 1.3;
+    }
+    
+    .docs-checkbox-container input[type="checkbox"],
+    .docs-checkbox-row2 input[type="checkbox"] {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        cursor: pointer;
+    }
+}
+
+@media screen and (max-width: 900px) {
+    .docs-checkbox-container,
+    .docs-checkbox-row2 {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px 16px;
+    }
+    
+    .docs-checkbox-container .checkbox-item,
+    .docs-checkbox-row2 .checkbox-item {
+        font-size: 0.75rem;
+    }
+}
+
+@media screen and (max-width: 600px) {
+    .docs-checkbox-container,
+    .docs-checkbox-row2 {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .docs-checkbox-container .checkbox-item,
+    .docs-checkbox-row2 .checkbox-item {
+        font-size: 0.7rem;
+        background: #f8fdf4;
+        border-radius: 8px;
+        padding: 8px 12px;
+        border: 1px solid #e2ecd9;
+    }
+    
+    .docs-checkbox-container input[type="checkbox"],
+    .docs-checkbox-row2 input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+    }
+}
+
     </style>
 </head>
 <body>
