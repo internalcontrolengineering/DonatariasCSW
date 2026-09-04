@@ -1419,7 +1419,7 @@
                                     <span class="small-hint" id="validacionesHint" style="font-size: 0.65rem; color: #e67e22;">Obligatorio solo si es Procedente</span>
                                 </div>
                             </div>
-                            <div class="form-grid"><div class="field-group full-width"><label>Hallazgos y evidencia</label><textarea id="hallazgosVisita"></textarea></div><div class="field-group"><label>Recomendación Técnica <span class="required-star">*</span></label><select id="recomendacionTecnica"><option value="">&nbsp;</option><option>Procedente</option><option>Improcedente</option></select></div></div>
+                            <div class="form-grid"><div class="field-group full-width"><label>Dictamen de Auditoría</label><textarea id="hallazgosVisita"></textarea></div><div class="field-group"><label>Recomendación Técnica <span class="required-star">*</span></label><select id="recomendacionTecnica"><option value="">&nbsp;</option><option>Procedente</option><option>Improcedente</option></select></div></div>
                             <div style="margin-top: 20px;"><button type="button" id="btnGuardarAuditoria" class="btn btn-primary"><i class="fas fa-save"></i> Guardar Validación Auditoría</button></div>
                         </div>
                     </div>
@@ -2731,12 +2731,21 @@ document.getElementById('saveHeaderBtn').addEventListener('click', saveHeaderCha
     }
 
     function setFormData(d) {
-        CAMPOS_FORMULARIO.forEach(campo => { const el = document.getElementById(campo); if (el) el.value = d[campo] || ''; });
-        CHECKBOX_CAMPOS.forEach(campo => { const el = document.getElementById(campo); if (el) el.checked = d[campo] || false; });
-        const checks = document.querySelectorAll('.docCheck');
-        if (d.documentos) checks.forEach((ch, i) => ch.checked = d.documentos[i]);
-        if (d.validaciones) { VALIDACIONES_CAMPOS.forEach(campo => { const el = document.getElementById(campo); if (el) el.checked = d.validaciones[campo] || false; }); }
-    }
+    CAMPOS_FORMULARIO.forEach(campo => { 
+        const el = document.getElementById(campo); 
+        if (el) {
+            el.value = d[campo] || '';
+            // Si es un textarea, ajustar altura
+            if (el.tagName === 'TEXTAREA') {
+                setTimeout(() => autoResizeTextarea(el), 50);
+            }
+        }
+    });
+    CHECKBOX_CAMPOS.forEach(campo => { const el = document.getElementById(campo); if (el) el.checked = d[campo] || false; });
+    const checks = document.querySelectorAll('.docCheck');
+    if (d.documentos) checks.forEach((ch, i) => ch.checked = d.documentos[i]);
+    if (d.validaciones) { VALIDACIONES_CAMPOS.forEach(campo => { const el = document.getElementById(campo); if (el) el.checked = d.validaciones[campo] || false; }); }
+}
 
      async function registrarSolicitud() {
         const error = validarSeccion1();
@@ -3573,7 +3582,7 @@ Validación: ${procedenteFlag ? '✅ PROCEDENTE' : '❌ IMPROCEDENTE'}
 ✅ Validaciones en sitio: 
 ${validacionesSitio.length > 0 ? validacionesSitio.join('\n') : '✓ Ninguna validación seleccionada'}
 
-📝 Hallazgos y evidencia: ${record.hallazgosVisita || 'Sin hallazgos registrados'}
+📝 Dictámen de Auditoría: ${record.hallazgosVisita || 'Sin hallazgos registrados'}
 
 💬 Recomendación Técnica: ${record.recomendacionTecnica || 'N/A'}
 
@@ -4373,8 +4382,33 @@ Este es un mensaje automático generado por el formato "CM-FOR-CONTRA-01"
     document.getElementById('filterFolio').addEventListener('change', (e) => { if (e.target.value) { const registro = donatarias.find(d => d.folioSolicitud === e.target.value); if (registro) loadRecordForReview(registro); } else limpiarFormularioCompleto(); });
     document.getElementById('filterRazonSocial').addEventListener('change', (e) => { if (e.target.value) { const registro = donatarias.find(d => d.razonSocial === e.target.value); if (registro) loadRecordForReview(registro); } else limpiarFormularioCompleto(); });
 
-    function autoResizeTextarea(textarea) { if(textarea){ textarea.style.height = '40px'; textarea.style.height = textarea.scrollHeight + 'px'; } }
-    ['objetoSocial', 'domFiscalReferencias', 'domOperReferencias', 'obsDocs', 'riesgosPreliminares', 'comentariosContraloria', 'hallazgosVisita'].forEach(id => { const ta = document.getElementById(id); if(ta) { ta.addEventListener('input', () => autoResizeTextarea(ta)); autoResizeTextarea(ta); } });
+function autoResizeTextarea(textarea) {
+    if (textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
+}
+// Campos de texto que deben ajustarse automáticamente
+const camposTexto = [
+    'objetoSocial', 
+    'domFiscalReferencias', 
+    'domOperReferencias', 
+    'obsDocs', 
+    'riesgosPreliminares', 
+    'comentariosContraloria', 
+    'hallazgosVisita'
+];
+
+camposTexto.forEach(id => { 
+    const ta = document.getElementById(id); 
+    if (ta) { 
+        ta.addEventListener('input', function() {
+            autoResizeTextarea(this);
+        });
+        // Ajustar al cargar la página si tiene contenido
+        setTimeout(() => autoResizeTextarea(ta), 100);
+    } 
+});
 
     function cambiarPestana(tabId, pageNumber) {
         localStorage.setItem('tabActiva', tabId); localStorage.setItem('paginaActiva', pageNumber);
