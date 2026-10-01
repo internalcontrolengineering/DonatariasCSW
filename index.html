@@ -1129,7 +1129,12 @@
         </h2>
         <p id="passwordModalSubtitle" style="text-align: center; color: #8faa8f; font-size: 0.85rem; margin-bottom: 25px;">Verificación de seguridad</p>
         <div style="padding: 0 20px;">
-            <input type="password" id="profilePassword" placeholder="Contraseña" style="width: 100%; padding: 14px 16px; border-radius: 16px; border: 2px solid #e2ecd9; margin-bottom: 5px; font-size: 0.95rem; box-sizing: border-box; transition: all 0.2s ease;">
+            <div style="position:relative; width:100%; margin-bottom:5px; box-sizing:border-box;">
+                <input type="password" id="profilePassword" name="profilePassword" placeholder="Contraseña" autocomplete="current-password" style="width: 100%; padding: 14px 42px 14px 16px; border-radius: 16px; border: 2px solid #e2ecd9; font-size: 0.95rem; box-sizing: border-box; transition: all 0.2s ease;">
+                <button type="button" id="toggleProfilePassword" title="Mostrar/Ocultar" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:transparent; border:none; cursor:pointer; color:#2e8b57; font-size:1.1rem; width:28px; height:28px; display:flex; align-items:center; justify-content:center; padding:0;">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </div>
         </div>
         <div style="display: flex; gap: 12px; padding: 15px 20px 20px 20px;">
             <button id="btnConfirmPassword" class="btn-password" style="flex: 1; background: #1f5e3f; color: white; border: none; padding: 12px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
@@ -1172,6 +1177,9 @@
             </button>
             <input type="file" id="importJSONFile" accept=".json" style="display: none;">
             <button id="btnCambiarPerfil" class="btn-cambiar-perfil"><i class="fas fa-exchange-alt"></i> Cambiar Perfil</button>
+            <button id="btnAdminConfig" class="btn-json" title="Configuración de contraseñas" style="display: none; background: #1f5e3f; color: white; border: none; padding: 5px 10px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; align-items: center; justify-content: center;">
+                <i class="fas fa-cog"></i>
+            </button>
         </div>
     </div>
     
@@ -1516,10 +1524,262 @@
     let docTitleEditable = false;
     let syncInProgress = false;
     let cambiosPendientes = false;
+    let PASSWORDS = { solicitante: 'Solicitante2026', contraloria: 'Contraloria2026', auditoria: 'Auditoria2026', 'control-interno': 'Administrador2026' };
+    const SYSTEM_CONFIG_ID = 'SYSTEM_CONFIG';
+    let realtimeChannel = null;
+    let authChannel = null;
+
+    function actualizarVisibilidadBotonConfig() {
+        const btnConfig = document.getElementById('btnAdminConfig');
+        if (btnConfig) {
+            btnConfig.style.display = (perfilActual === 'control-interno') ? 'inline-flex' : 'none';
+        }
+    }
+
+
 
     // ============================================================
-    // ========== 2. SISTEMA DE SESIÓN PERSISTENTE ===============
+    // ========== REALTIME Y CONFIG DE CONTRASEÑAS ================
     // ============================================================
+    async function cargarConfigPasswords() {
+        try {
+            const { data, error } = await supabase.from('donatarias').select('*').eq('id', SYSTEM_CONFIG_ID).maybeSingle();
+            if (error) { console.warn('No se pudo cargar config de passwords:', error); return; }
+            if (data && data.datos && data.datos.passwords) {
+                PASSWORDS = { ...PASSWORDS, ...data.datos.passwords };
+                console.log('Contraseñas cargadas desde la nube');
+            } else {
+                await guardarConfigPasswords();
+            }
+        } catch (e) { console.warn('Error cargando config passwords:', e); }
+    }
+
+    async function guardarConfigPasswords() {
+        try {
+            const configData = {
+                id: SYSTEM_CONFIG_ID,
+                datos: { type: 'config', passwords: PASSWORDS },
+                updated_at: new Date().toISOString()
+            };
+            const { error } = await supabase.from('donatarias').upsert(configData, { onConflict: 'id' });
+            if (error) console.error('Error guardando config passwords:', error);
+            else console.log('Config de passwords guardada');
+        } catch (e) { console.error('Error en guardarConfigPasswords:', e); }
+    }
+
+    function iniciarRealtime() {
+        if (realtimeChannel) return;
+        realtimeChannel = supabase.channel('donatarias-changes')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'donatarias' }, (payload) => {
+                handleRealtimeChange('INSERT', payload);
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'donatarias' }, (payload) => {
+                handleRealtimeChange('UPDATE', payload);
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'donatarias' }, (payload) => {
+                handleRealtimeChange('DELETE', payload);
+            })
+            .subscribe((status) => {
+                console.log('Realtime status:', status);
+            });
+
+        authChannel = supabase.channel('app-auth-events')
+            .on('broadcast', { event: 'password_changed' }, (payload) => {
+                const data = payload.payload || {};
+                if (data.perfil && data.perfil === perfilActual) {
+                    forzarCierrePorCambioPassword(data.perfil);
+                }
+            })
+            .on('broadcast', { event: 'record_deleted' }, (payload) => {
+                const deletedId = payload.payload && payload.payload.id;
+                if (!deletedId) return;
+                const idx = donatarias.findIndex(d => d.id === deletedId);
+                if (idx !== -1) {
+                    donatarias.splice(idx, 1);
+                    localStorage.setItem("coma_donatarias_final_v20", JSON.stringify(donatarias));
+                    renderSolicitudList();
+                    renderAltaList();
+                    updateFilters();
+                    refrescarContador();
+                    console.log('Broadcast DELETE recibido:', deletedId);
+                }
+                if (currentViewingId === deletedId) {
+                    limpiarFormularioCompleto();
+                    Swal.fire({ title: 'Registro eliminado', text: 'El registro que estaba visualizando fue eliminado por otro usuario.', icon: 'info', timer: 3000, showConfirmButton: false });
+                }
+            })
+            .subscribe();
+
+        // Sincronización de respaldo (por si Realtime falla o se desconecta)
+        iniciarSyncPeriodico();
+    }
+
+    let syncPeriodicoTimer = null;
+    let syncPeriodicoEnCurso = false;
+
+    function iniciarSyncPeriodico() {
+        if (syncPeriodicoTimer) return;
+        // Cada 20 segundos comparar con la nube
+        syncPeriodicoTimer = setInterval(() => { sincronizarDesdeNubeSilencioso(); }, 20000);
+        // Al volver a la pestaña del navegador, sincronizar de inmediato
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                sincronizarDesdeNubeSilencioso();
+            }
+        });
+        window.addEventListener('focus', () => { sincronizarDesdeNubeSilencioso(); });
+    }
+
+    async function sincronizarDesdeNubeSilencioso() {
+        if (syncPeriodicoEnCurso || syncInProgress) return;
+        syncPeriodicoEnCurso = true;
+        try {
+            const { data, error } = await supabase.from('donatarias').select('*').order('created_at', { ascending: false });
+            if (error || !data) { syncPeriodicoEnCurso = false; return; }
+
+            const registrosNube = data
+                .filter(r => r.id !== SYSTEM_CONFIG_ID)
+                .map(r => Object.assign({}, r.datos, { id: r.id, created_at: r.created_at, updated_at: r.updated_at }));
+
+            const idsNube = new Set(registrosNube.map(r => r.id));
+            const idsLocal = new Set(donatarias.map(d => d.id));
+
+            let huboCambio = false;
+
+            // Eliminar locales que ya no existen en la nube
+            const antes = donatarias.length;
+            const eliminados = [];
+            donatarias = donatarias.filter(d => {
+                if (!idsNube.has(d.id)) {
+                    eliminados.push(d.id);
+                    return false;
+                }
+                return true;
+            });
+            if (donatarias.length !== antes) {
+                huboCambio = true;
+                console.log('Sync: eliminados localmente (ya no en nube):', eliminados);
+                // Si el usuario estaba viendo uno eliminado, limpiar
+                if (currentViewingId && eliminados.includes(currentViewingId)) {
+                    limpiarFormularioCompleto();
+                    Swal.fire({ title: 'Registro eliminado', text: 'El registro que estaba visualizando fue eliminado.', icon: 'info', timer: 2500, showConfirmButton: false });
+                }
+            }
+
+            // Agregar o actualizar los de la nube
+            registrosNube.forEach(remoto => {
+                const idx = donatarias.findIndex(d => d.id === remoto.id);
+                if (idx === -1) {
+                    donatarias.push(remoto);
+                    huboCambio = true;
+                } else {
+                    // Actualizar si cambió updated_at
+                    const localUp = donatarias[idx].updated_at || '';
+                    const remotoUp = remoto.updated_at || '';
+                    if (remotoUp && remotoUp !== localUp) {
+                        donatarias[idx] = remoto;
+                        huboCambio = true;
+                        if (currentViewingId === remoto.id) {
+                            loadRecordForReview(remoto);
+                        }
+                    }
+                }
+            });
+
+            // Ordenar por created_at desc
+            donatarias.sort((a, b) => {
+                const da = a.created_at || '';
+                const db = b.created_at || '';
+                return db.localeCompare(da);
+            });
+
+            if (huboCambio) {
+                localStorage.setItem("coma_donatarias_final_v20", JSON.stringify(donatarias));
+                renderSolicitudList();
+                renderAltaList();
+                updateFilters();
+                refrescarContador();
+                console.log('Sync silencioso: UI actualizada. Total:', donatarias.length);
+            }
+        } catch (e) {
+            console.warn('Sync silencioso error:', e);
+        } finally {
+            syncPeriodicoEnCurso = false;
+        }
+    }
+
+    function handleRealtimeChange(event, payload) {
+        // No ignorar cambios de otros usuarios aunque haya sync local en curso
+        // (solo se evita loop propio porque el upsert propio ya actualizó el array)
+
+        const recordId = (payload.new && payload.new.id) || (payload.old && payload.old.id);
+        if (recordId === SYSTEM_CONFIG_ID) {
+            if ((event === 'UPDATE' || event === 'INSERT') && payload.new && payload.new.datos && payload.new.datos.passwords) {
+                const oldPass = Object.assign({}, PASSWORDS);
+                PASSWORDS = Object.assign({}, PASSWORDS, payload.new.datos.passwords);
+                if (perfilActual && oldPass[perfilActual] !== PASSWORDS[perfilActual]) {
+                    forzarCierrePorCambioPassword(perfilActual);
+                }
+            }
+            return;
+        }
+        if (event === 'INSERT' && payload.new) {
+            const nuevo = Object.assign({}, payload.new.datos, { id: payload.new.id, created_at: payload.new.created_at, updated_at: payload.new.updated_at });
+            if (!donatarias.find(function(d) { return d.id === nuevo.id; })) {
+                donatarias.unshift(nuevo);
+                console.log('Realtime INSERT:', nuevo.folioSolicitud || nuevo.id);
+            }
+        } else if (event === 'UPDATE' && payload.new) {
+            const actualizado = Object.assign({}, payload.new.datos, { id: payload.new.id, created_at: payload.new.created_at, updated_at: payload.new.updated_at });
+            const idx = donatarias.findIndex(function(d) { return d.id === actualizado.id; });
+            if (idx !== -1) {
+                donatarias[idx] = actualizado;
+            } else {
+                donatarias.unshift(actualizado);
+            }
+            if (currentViewingId === actualizado.id) {
+                loadRecordForReview(actualizado);
+            }
+            console.log('Realtime UPDATE:', actualizado.folioSolicitud || actualizado.id);
+        } else if (event === 'DELETE') {
+            // payload.old puede traer solo el id (REPLICA IDENTITY DEFAULT)
+            const deletedId = (payload.old && payload.old.id) || (payload.new && payload.new.id);
+            if (deletedId) {
+                const idx = donatarias.findIndex(function(d) { return d.id === deletedId; });
+                if (idx !== -1) {
+                    donatarias.splice(idx, 1);
+                    console.log('Realtime DELETE:', deletedId);
+                }
+                if (currentViewingId === deletedId) {
+                    limpiarFormularioCompleto();
+                    Swal.fire({ title: 'Registro eliminado', text: 'El registro que estaba visualizando fue eliminado por otro usuario.', icon: 'info', timer: 3000, showConfirmButton: false });
+                }
+            }
+        }
+        renderSolicitudList();
+        renderAltaList();
+        updateFilters();
+        refrescarContador();
+        localStorage.setItem("coma_donatarias_final_v20", JSON.stringify(donatarias));
+    }
+
+    async function forzarCierrePorCambioPassword(perfil) {
+        const nombres = { solicitante: 'Solicitante', contraloria: 'Contraloría', auditoria: 'Auditoría', 'control-interno': 'Administrador' };
+        await Swal.fire({
+            title: '🔑 Contraseña Actualizada',
+            html: 'La contraseña del perfil <strong>' + (nombres[perfil] || perfil) + '</strong> ha sido cambiada por el administrador.<br><br>Su sesión se cerrará. Debe iniciar sesión nuevamente con la nueva contraseña.',
+            icon: 'warning',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#1f5e3f',
+            allowOutsideClick: false
+        });
+        // Pequeño delay para asegurar que Swal se cerró completamente antes de mostrar el modal
+        setTimeout(() => { cerrarSesion(); }, 150);
+    }
+
+
+    // ============================================================
+    // ========== 2. SISTEMA DE SESIÓN PERSISTENTE ===============    // ============================================================
     const MINUTOS_SESION = 10;
     const TIEMPO_INACTIVIDAD = MINUTOS_SESION * 60 * 1000;
     let tiempoRestante = MINUTOS_SESION * 60;
@@ -1603,12 +1863,15 @@
             const { data, error } = await supabase.from('donatarias').select('*').order('created_at', { ascending: false });
             if (error) { console.error('Error al cargar datos:', error); showSyncStatus('Error al cargar datos desde la nube', 'error'); return false; }
             if (data && data.length > 0) {
-                donatarias = data.map(record => ({ ...record.datos, id: record.id, created_at: record.created_at, updated_at: record.updated_at }));
+                const registros = data.filter(record => record.id !== SYSTEM_CONFIG_ID);
+                donatarias = registros.map(record => ({ ...record.datos, id: record.id, created_at: record.created_at, updated_at: record.updated_at }));
                 console.log('Datos cargados desde Supabase:', donatarias.length, 'registros');
             } else {
                 const stored = localStorage.getItem("coma_donatarias_final_v20");
                 if (stored) { donatarias = JSON.parse(stored); await guardarTodosEnSupabase(); }
             }
+            await cargarConfigPasswords();
+            iniciarRealtime();
             showSyncStatus('Datos sincronizados', 'success');
             return true;
         } catch (error) { console.error('Error al cargar desde Supabase:', error); showSyncStatus('Error de conexión con la nube', 'error'); return false; }
@@ -1666,12 +1929,31 @@
     async function eliminarRegistro(record) {
         const index = donatarias.findIndex(r => r.id === record.id);
         if (index !== -1) {
+            const deletedId = record.id;
+            const deletedOk = await eliminarRegistroDeSupabase(deletedId);
+            if (!deletedOk) {
+                Swal.fire('Error', 'No se pudo eliminar el registro de la nube. Intente nuevamente.', 'error');
+                return;
+            }
             donatarias.splice(index, 1);
-            await eliminarRegistroDeSupabase(record.id);
             await saveToStorage();
             renderSolicitudList();
             renderAltaList();
             updateFilters();
+            refrescarContador();
+            if (currentViewingId === deletedId) {
+                limpiarFormularioCompleto();
+            }
+            // Aviso extra por broadcast (respaldo si postgres_changes no llega)
+            try {
+                if (authChannel) {
+                    authChannel.send({
+                        type: 'broadcast',
+                        event: 'record_deleted',
+                        payload: { id: deletedId }
+                    });
+                }
+            } catch (e) { console.warn('Broadcast delete failed', e); }
         }
     }
 
@@ -1831,7 +2113,7 @@
     // ============================================================
     let perfilActual = null;
     let modoEdicionAdmin = false;
-    const PASSWORDS = { solicitante: 'Solicitante2026', contraloria: 'Contraloria2026', auditoria: 'Auditoria2026', 'control-interno': 'Administrador2026' };
+    // PASSWORDS se define al inicio y se carga/sincroniza desde la nube
 
     function mostrarModalPerfil() { document.getElementById('profileModal').style.display = 'flex'; }
     function ocultarModalPerfil() { document.getElementById('profileModal').style.display = 'none'; }
@@ -1846,6 +2128,12 @@
         modal.style.display = 'flex';
         const passwordInput = document.getElementById('profilePassword');
         passwordInput.value = '';
+        passwordInput.type = 'password';
+        const eyeIcon = document.querySelector('#toggleProfilePassword i');
+        if (eyeIcon) {
+            eyeIcon.classList.add('fa-eye');
+            eyeIcon.classList.remove('fa-eye-slash');
+        }
         passwordInput.focus();
         passwordInput.style.borderColor = '#e2ecd9';
         passwordInput.style.boxShadow = 'none';
@@ -1874,19 +2162,60 @@
             if (errorMsg) errorMsg.remove();
         };
         const handleConfirm = () => {
-            const password = passwordInput.value;
+            // Leer el valor de forma robusta (autocompletado del navegador a veces no entrega el value al instante)
+            let password = (passwordInput.value || '').trim();
+            // Si parece vacío, forzar un re-read tras un tick (caso típico de autofill)
+            if (!password) {
+                passwordInput.focus();
+                passwordInput.blur();
+                passwordInput.focus();
+                password = (passwordInput.value || '').trim();
+            }
             limpiarError();
-            if (password === PASSWORDS[perfil]) {
+            const expected = (PASSWORDS[perfil] || '').trim();
+            if (password && password === expected) {
                 accesoExitoso = true;
                 modal.style.display = 'none';
                 establecerPerfil(perfil);
                 if (callback) callback(true);
             } else {
-                mostrarError('Contraseña incorrecta. Por favor, intente nuevamente.');
-                passwordInput.value = '';
-                passwordInput.focus();
+                // Segundo intento con pequeño delay por si el autofill aún no terminó
+                setTimeout(() => {
+                    const password2 = (passwordInput.value || '').trim();
+                    if (password2 && password2 === expected) {
+                        accesoExitoso = true;
+                        modal.style.display = 'none';
+                        establecerPerfil(perfil);
+                        if (callback) callback(true);
+                    } else {
+                        mostrarError('Contraseña incorrecta. Por favor, intente nuevamente.');
+                        passwordInput.value = '';
+                        passwordInput.focus();
+                    }
+                }, 80);
             }
         };
+
+        // Botón ojo para mostrar/ocultar contraseña en el login
+        const toggleBtn = document.getElementById('toggleProfilePassword');
+        if (toggleBtn) {
+            // Clonar para evitar listeners duplicados al reabrir el modal
+            const newToggle = toggleBtn.cloneNode(true);
+            toggleBtn.parentNode.replaceChild(newToggle, toggleBtn);
+            newToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const isPass = passwordInput.type === 'password';
+                passwordInput.type = isPass ? 'text' : 'password';
+                const icon = newToggle.querySelector('i');
+                if (icon) {
+                    icon.classList.toggle('fa-eye', !isPass);
+                    icon.classList.toggle('fa-eye-slash', isPass);
+                }
+                // Al cambiar el tipo, el navegador confirma el valor (útil con autofill)
+                passwordInput.focus();
+            });
+        }
         const handleCancel = () => {
             modal.style.display = 'none';
             limpiarError();
@@ -1920,6 +2249,7 @@
         const nombres = { solicitante: 'Solicitante', contraloria: 'Contraloría', auditoria: 'Auditoría', 'control-interno': 'Administrador' };
         document.getElementById('perfilActivoNombre').innerText = nombres[perfil];
         document.getElementById('perfilActivoBar').style.display = 'flex';
+        actualizarVisibilidadBotonConfig();
         aplicarPermisosPorPerfil();
         refrescarContador();
         Swal.fire({ title: `✅ Perfil activado`, html: `Ha iniciado sesión como <strong>${nombres[perfil]}</strong>`, icon: 'success', timer: 2000, showConfirmButton: false });
@@ -1977,12 +2307,194 @@
     }
 
     function cerrarSesion() {
+        if (temporizadorInactividad) clearTimeout(temporizadorInactividad);
+        if (temporizadorReloj) clearInterval(temporizadorReloj);
         perfilActual = null;
         localStorage.removeItem('perfilActual');
-        location.reload();
+        sessionStorage.removeItem('sesionActiva');
+        const bar = document.getElementById('perfilActivoBar');
+        if (bar) bar.style.display = 'none';
+        const btnConfig = document.getElementById('btnAdminConfig');
+        if (btnConfig) btnConfig.style.display = 'none';
+        mostrarRelojSesion(false);
+        try { limpiarFormularioCompleto(); } catch(e) { console.warn(e); }
+        // Forzar aparición del modal de login de forma confiable
+        const profileModal = document.getElementById('profileModal');
+        if (profileModal) {
+            profileModal.style.display = 'flex';
+            profileModal.style.zIndex = '10000';
+            profileModal.style.visibility = 'visible';
+            profileModal.style.opacity = '1';
+        }
+        // Resetear el select de perfil
+        const profileSelect = document.getElementById('profileSelect');
+        if (profileSelect) profileSelect.value = '';
+        // Cerrar cualquier Swal residual
+        if (typeof Swal !== 'undefined' && Swal.isVisible && Swal.isVisible()) {
+            Swal.close();
+        }
     }
 
     document.getElementById('btnCambiarPerfil')?.addEventListener('click', () => { cerrarSesion(); });
+
+    document.getElementById('btnAdminConfig')?.addEventListener('click', abrirModalConfigPasswords);
+
+    async function abrirModalConfigPasswords() {
+        if (perfilActual !== 'control-interno') {
+            Swal.fire('Acceso denegado', 'Solo el perfil Administrador puede cambiar contraseñas.', 'error');
+            return;
+        }
+        const nombres = { solicitante: 'Solicitante', contraloria: 'Contraloría', auditoria: 'Auditoría', 'control-interno': 'Administrador' };
+        const { value: formValues } = await Swal.fire({
+            title: '<i class="fas fa-cog"></i> Configuración de Contraseñas',
+            html: `
+                <div id="swal-pass-config-wrap" style="text-align:left; padding:0; width:100%; box-sizing:border-box; overflow:hidden;">
+                    <label style="font-weight:600; font-size:0.82rem; color:#1f5e3f; display:block; margin-bottom:5px;">Seleccione el perfil</label>
+                    <select id="swal-perfil-select" style="width:100%; padding:10px 12px; border:1px solid #d0dec8; border-radius:10px; font-size:0.9rem; margin-bottom:14px; box-sizing:border-box; background:#fff; color:#1e3a2f; appearance:auto;">
+                        <option value="">-- Seleccione --</option>
+                        <option value="solicitante">✍️ Solicitante</option>
+                        <option value="contraloria">🛡️ Contraloría</option>
+                        <option value="auditoria">📋 Auditoría</option>
+                        <option value="control-interno">🔒 Administrador</option>
+                    </select>
+                    <div id="swal-pass-fields" style="display:none; width:100%; box-sizing:border-box;">
+                        <label style="font-weight:600; font-size:0.82rem; color:#1f5e3f; display:block; margin-bottom:5px;">Contraseña actual</label>
+                        <input type="text" id="swal-pass-actual" readonly style="width:100%; padding:10px 12px; border:1px solid #d0dec8; border-radius:10px; font-size:0.9rem; margin-bottom:12px; box-sizing:border-box; background:#f0f7ec; font-family:monospace; color:#1e3a2f;">
+                        
+                        <label style="font-weight:600; font-size:0.82rem; color:#1f5e3f; display:block; margin-bottom:5px;">Nueva contraseña</label>
+                        <div style="position:relative; width:100%; margin-bottom:12px; box-sizing:border-box;">
+                            <input type="password" id="swal-pass-nueva" placeholder="Mínimo 8 caracteres" style="width:100%; padding:10px 40px 10px 12px; border:1px solid #d0dec8; border-radius:10px; font-size:0.9rem; box-sizing:border-box; background:#fff; color:#1e3a2f; margin:0;">
+                            <button type="button" id="toggle-nueva" title="Mostrar/Ocultar" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; cursor:pointer; color:#2e8b57; font-size:1rem; width:28px; height:28px; display:flex; align-items:center; justify-content:center; padding:0;">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        
+                        <label style="font-weight:600; font-size:0.82rem; color:#1f5e3f; display:block; margin-bottom:5px;">Confirmar nueva contraseña</label>
+                        <div style="position:relative; width:100%; box-sizing:border-box;">
+                            <input type="password" id="swal-pass-confirm" placeholder="Repita la nueva contraseña" style="width:100%; padding:10px 40px 10px 12px; border:1px solid #d0dec8; border-radius:10px; font-size:0.9rem; box-sizing:border-box; background:#fff; color:#1e3a2f; margin:0;">
+                            <button type="button" id="toggle-confirm" title="Mostrar/Ocultar" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; cursor:pointer; color:#2e8b57; font-size:1rem; width:28px; height:28px; display:flex; align-items:center; justify-content:center; padding:0;">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-save"></i> Guardar cambios',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#1f5e3f',
+            cancelButtonColor: '#a0aec0',
+            width: '400px',
+            padding: '1.25em',
+            didOpen: () => {
+                const sel = document.getElementById('swal-perfil-select');
+                const fields = document.getElementById('swal-pass-fields');
+                const actual = document.getElementById('swal-pass-actual');
+                sel.addEventListener('change', () => {
+                    const p = sel.value;
+                    if (p && PASSWORDS[p]) {
+                        fields.style.display = 'block';
+                        actual.value = PASSWORDS[p];
+                    } else {
+                        fields.style.display = 'none';
+                        actual.value = '';
+                    }
+                });
+                // Toggle show/hide password
+                function setupToggle(btnId, inputId) {
+                    const btn = document.getElementById(btnId);
+                    const input = document.getElementById(inputId);
+                    if (!btn || !input) return;
+                    btn.addEventListener('click', () => {
+                        const isPass = input.type === 'password';
+                        input.type = isPass ? 'text' : 'password';
+                        const icon = btn.querySelector('i');
+                        if (icon) {
+                            icon.classList.toggle('fa-eye', !isPass);
+                            icon.classList.toggle('fa-eye-slash', isPass);
+                        }
+                    });
+                }
+                setupToggle('toggle-nueva', 'swal-pass-nueva');
+                setupToggle('toggle-confirm', 'swal-pass-confirm');
+            },
+            preConfirm: () => {
+                const perfil = document.getElementById('swal-perfil-select').value;
+                const nueva = document.getElementById('swal-pass-nueva').value;
+                const confirm = document.getElementById('swal-pass-confirm').value;
+                if (!perfil) {
+                    Swal.showValidationMessage('Debe seleccionar un perfil');
+                    return false;
+                }
+                if (!nueva || nueva.length < 8) {
+                    Swal.showValidationMessage('La nueva contraseña debe tener al menos 8 caracteres');
+                    return false;
+                }
+                if (nueva !== confirm) {
+                    Swal.showValidationMessage('Las contraseñas no coinciden');
+                    return false;
+                }
+                if (nueva === PASSWORDS[perfil]) {
+                    Swal.showValidationMessage('La nueva contraseña debe ser diferente a la actual');
+                    return false;
+                }
+                return { perfil, nueva, actual: PASSWORDS[perfil] };
+            }
+        });
+
+        if (!formValues) return;
+
+        const nombresPerfil = nombres[formValues.perfil] || formValues.perfil;
+        const { isConfirmed } = await Swal.fire({
+            title: '¿Confirmar cambio de contraseña?',
+            html: `
+                <div style="text-align:left; font-size:0.9rem;">
+                    <p><strong>Perfil:</strong> ${nombresPerfil}</p>
+                    <p><strong>Contraseña anterior:</strong> <code style="background:#f0f7ec;padding:2px 6px;border-radius:4px;">${formValues.actual}</code></p>
+                    <p><strong>Nueva contraseña:</strong> <code style="background:#e8f5e9;padding:2px 6px;border-radius:4px;">${formValues.nueva}</code></p>
+                    <p style="margin-top:12px; color:#e67e22; font-size:0.8rem;"><i class="fas fa-exclamation-triangle"></i> Si hay usuarios conectados con este perfil, se cerrará su sesión automáticamente.</p>
+                </div>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, cambiar contraseña',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#1f5e3f',
+            cancelButtonColor: '#a0aec0'
+        });
+
+        if (!isConfirmed) return;
+
+        PASSWORDS[formValues.perfil] = formValues.nueva;
+        await guardarConfigPasswords();
+
+        if (authChannel) {
+            authChannel.send({
+                type: 'broadcast',
+                event: 'password_changed',
+                payload: { perfil: formValues.perfil, changedBy: 'admin' }
+            });
+        }
+
+        if (formValues.perfil === perfilActual) {
+            await Swal.fire({
+                title: '✅ Contraseña actualizada',
+                html: 'La contraseña de su propio perfil ha sido cambiada.<br>Deberá iniciar sesión nuevamente.',
+                icon: 'success',
+                confirmButtonColor: '#1f5e3f'
+            });
+            cerrarSesion();
+        } else {
+            await Swal.fire({
+                title: '✅ Contraseña actualizada',
+                html: `La contraseña del perfil <strong>${nombresPerfil}</strong> ha sido cambiada correctamente.<br>La contraseña anterior ya no funciona.`,
+                icon: 'success',
+                confirmButtonColor: '#1f5e3f',
+                timer: 3000
+            });
+        }
+    }
 
     const profileSelect = document.getElementById('profileSelect');
     profileSelect.addEventListener('change', function() {
@@ -2002,6 +2514,7 @@
             const nombres = { solicitante: 'Solicitante', contraloria: 'Contraloría', auditoria: 'Auditoría', 'control-interno': 'Administrador' };
             document.getElementById('perfilActivoNombre').innerText = nombres[perfilGuardado];
             document.getElementById('perfilActivoBar').style.display = 'flex';
+            actualizarVisibilidadBotonConfig();
             aplicarPermisosPorPerfil();
             ocultarModalPerfil();
             iniciarTemporizadorSesion();
@@ -2545,7 +3058,7 @@ async function requestEditAccess() {
         }
     });
     
-    if (password === 'ControlInterno2026') {
+    if (password === PASSWORDS['control-interno']) {
         // Activar modo edición de la tabla
         document.querySelectorAll('#headerTable td').forEach(td => {
             if (td.querySelector('.edit-input') || td.querySelector('.edit-select')) {
@@ -2735,9 +3248,8 @@ document.getElementById('saveHeaderBtn').addEventListener('click', saveHeaderCha
         const el = document.getElementById(campo); 
         if (el) {
             el.value = d[campo] || '';
-            // Si es un textarea, ajustar altura
             if (el.tagName === 'TEXTAREA') {
-                setTimeout(() => autoResizeTextarea(el), 50);
+                autoResizeTextarea(el);
             }
         }
     });
@@ -2745,6 +3257,8 @@ document.getElementById('saveHeaderBtn').addEventListener('click', saveHeaderCha
     const checks = document.querySelectorAll('.docCheck');
     if (d.documentos) checks.forEach((ch, i) => ch.checked = d.documentos[i]);
     if (d.validaciones) { VALIDACIONES_CAMPOS.forEach(campo => { const el = document.getElementById(campo); if (el) el.checked = d.validaciones[campo] || false; }); }
+    // Re-ajustar después de que el layout se estabilice
+    forzarAjusteTextareas();
 }
 
      async function registrarSolicitud() {
@@ -3746,6 +4260,8 @@ Este es un mensaje automático generado por el formato "CM-FOR-CONTRA-01"
         if (section2) section2.classList.add('hidden-section');
         if (section3) section3.classList.add('hidden-section');
         setFormData(record);
+        // Asegurar que los textareas se ajusten después de mostrar secciones
+        forzarAjusteTextareas();
         if (record.voboContraloria) document.getElementById('voboContraloriaSelect').value = record.voboContraloria;
         if (record.recomendacionTecnica) document.getElementById('recomendacionTecnica').value = record.recomendacionTecnica;
         if (record.solicitante) {
@@ -4167,20 +4683,53 @@ Este es un mensaje automático generado por el formato "CM-FOR-CONTRA-01"
         
         const opt = { 
             margin: [3, 5, 3, 5], 
-            filename: nombreArchivo,  // Usar el nombre generado
-            image: { type: 'jpeg', quality: 0.95 }, 
-            html2canvas: { scale: 1.8, useCORS: true, letterRendering: true, logging: false, ignoreElements: (elem) => elem.classList && elem.classList.contains('btn-pdf') }, 
+            filename: nombreArchivo,
+            image: { type: 'jpeg', quality: 0.92 }, 
+            html2canvas: { 
+                scale: 1.5, 
+                useCORS: true, 
+                allowTaint: true,
+                letterRendering: true, 
+                logging: false,
+                backgroundColor: '#ffffff',
+                imageTimeout: 15000,
+                removeContainer: true,
+                ignoreElements: (elem) => elem.classList && (elem.classList.contains('btn-pdf') || elem.classList.contains('pdf-button-container'))
+            }, 
             jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait', compress: true, hotfixes: ['px_scaling'] }, 
-            pagebreak: { mode: 'avoid-all' } 
+            pagebreak: { mode: ['css', 'legacy'] } 
         };
-        
-        html2pdf().set(opt).from(printContainer).save().then(() => { 
-            location.reload(); 
-        }).catch(err => { 
-            console.error('Error al generar PDF:', err); 
-            Swal.fire('Error', 'No se pudo generar el PDF', 'error'); 
-            location.reload(); 
-        });
+
+        // Generar con reintentos automáticos (sin recargar la página)
+        async function intentarGenerarPDF(intento) {
+            const maxIntentos = 3;
+            try {
+                await html2pdf().set(opt).from(printContainer).save();
+                Swal.close();
+                await Swal.fire({
+                    title: '✅ PDF generado',
+                    text: 'El archivo se descargó correctamente.',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } catch (err) {
+                console.error('Error al generar PDF (intento ' + intento + '):', err);
+                if (intento < maxIntentos) {
+                    // Esperar un momento y reintentar
+                    await new Promise(r => setTimeout(r, 600));
+                    return intentarGenerarPDF(intento + 1);
+                }
+                Swal.fire({
+                    title: 'Error',
+                    html: 'No se pudo generar el PDF después de varios intentos.<br><small>Intente de nuevo o use Ctrl+P para imprimir.</small>',
+                    icon: 'error',
+                    confirmButtonColor: '#1f5e3f'
+                });
+            }
+        }
+
+        intentarGenerarPDF(1);
     }
 
     function renderPrintFormat(data, tipo) {
@@ -4237,7 +4786,7 @@ Este es un mensaje automático generado por el formato "CM-FOR-CONTRA-01"
 
     async function solicitarPasswordYEditar(record) {
         const { value: password } = await Swal.fire({ title: '🔒 Verificación de Seguridad', text: 'Ingrese la contraseña para editar este registro', input: 'password', inputPlaceholder: 'Contraseña', showCancelButton: true, confirmButtonText: '<i class="fas fa-check"></i> Validar', cancelButtonText: '<i class="fas fa-times"></i> Cancelar', confirmButtonColor: '#1f5e3f', cancelButtonColor: '#a0aec0', inputAttributes: { autocomplete: 'off' } });
-        if (password === 'ControlInterno2026') {
+        if (password === PASSWORDS['control-interno']) {
             modoEdicionAdmin = true;
             await Swal.fire({ title: '✅ Acceso Concedido', text: 'Ahora puede editar el registro en la sección "Solicitud y Validación"', icon: 'success', timer: 2000, showConfirmButton: true, confirmButtonColor: '#1f5e3f' });
             habilitarEdicionRegistro(record);
@@ -4363,7 +4912,7 @@ Este es un mensaje automático generado por el formato "CM-FOR-CONTRA-01"
 
     async function solicitarPasswordYEliminar(record) {
         const { value: password } = await Swal.fire({ title: '🔒 Verificación de Seguridad', text: 'Ingrese la contraseña para eliminar este registro', input: 'password', inputPlaceholder: 'Contraseña', showCancelButton: true, confirmButtonText: '<i class="fas fa-check"></i> Validar', cancelButtonText: '<i class="fas fa-times"></i> Cancelar', confirmButtonColor: '#1f5e3f', cancelButtonColor: '#a0aec0', inputAttributes: { autocomplete: 'off' } });
-        if (password === 'ControlInterno2026') {
+        if (password === PASSWORDS['control-interno']) {
             const result = await Swal.fire({ title: '⚠️ ¿Está seguro?', html: `Está a punto de eliminar el registro:<br><br><strong>${escapeHtml(record.razonSocial)}</strong><br>Folio: ${record.folioSolicitud}<br><br>Esta acción no se puede deshacer.`, icon: 'warning', showCancelButton: true, confirmButtonText: '<i class="fas fa-trash"></i> Sí, Eliminar', cancelButtonText: '<i class="fas fa-times"></i> Cancelar', confirmButtonColor: '#e74c3c', cancelButtonColor: '#a0aec0', reverseButtons: true });
             if (result.isConfirmed) {
                 const index = donatarias.findIndex(r => r.id === record.id);
@@ -4383,11 +4932,53 @@ Este es un mensaje automático generado por el formato "CM-FOR-CONTRA-01"
     document.getElementById('filterRazonSocial').addEventListener('change', (e) => { if (e.target.value) { const registro = donatarias.find(d => d.razonSocial === e.target.value); if (registro) loadRecordForReview(registro); } else limpiarFormularioCompleto(); });
 
 function autoResizeTextarea(textarea) {
-    if (textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = textarea.scrollHeight + 'px';
+    if (!textarea) return;
+    // Forzar que se mida aunque estuviera oculto
+    const wasHidden = textarea.offsetParent === null;
+    let prevDisplay, prevVisibility, prevPosition, parentPrev;
+    if (wasHidden) {
+        // Temporalmente hacerlo visible para medir
+        prevDisplay = textarea.style.display;
+        prevVisibility = textarea.style.visibility;
+        prevPosition = textarea.style.position;
+        textarea.style.display = 'block';
+        textarea.style.visibility = 'hidden';
+        textarea.style.position = 'absolute';
+    }
+    textarea.style.height = 'auto';
+    textarea.style.overflow = 'hidden';
+    const newHeight = Math.max(textarea.scrollHeight, 40);
+    textarea.style.height = newHeight + 'px';
+    if (wasHidden) {
+        textarea.style.display = prevDisplay || '';
+        textarea.style.visibility = prevVisibility || '';
+        textarea.style.position = prevPosition || '';
     }
 }
+
+function resizeAllTextareas() {
+    const ids = ['objetoSocial', 'domFiscalReferencias', 'domOperReferencias', 'obsDocs', 'riesgosPreliminares', 'comentariosContraloria', 'hallazgosVisita'];
+    ids.forEach(id => {
+        const ta = document.getElementById(id);
+        if (ta && ta.value && ta.value.trim() !== '') {
+            autoResizeTextarea(ta);
+        }
+    });
+}
+
+function forzarAjusteTextareas() {
+    // Varios intentos para cubrir distintos momentos del layout
+    resizeAllTextareas();
+    requestAnimationFrame(() => {
+        resizeAllTextareas();
+        setTimeout(resizeAllTextareas, 50);
+        setTimeout(resizeAllTextareas, 150);
+        setTimeout(resizeAllTextareas, 300);
+        setTimeout(resizeAllTextareas, 600);
+        setTimeout(resizeAllTextareas, 1000);
+    });
+}
+
 // Campos de texto que deben ajustarse automáticamente
 const camposTexto = [
     'objetoSocial', 
@@ -4421,6 +5012,10 @@ camposTexto.forEach(id => {
         document.getElementById('paginaDisplay').innerText = `${pageNumber} de 4`;
         if (tabId !== 'print-tab') mostrarBotonPDF(false);
         else { const printContainer = document.getElementById('printFormatContainer'); if (printContainer && !printContainer.querySelector('.empty-message')) mostrarBotonPDF(true); else mostrarBotonPDF(false); }
+        // Al entrar a la pestaña de solicitud, reajustar textareas
+        if (tabId === 'form-tab') {
+            forzarAjusteTextareas();
+        }
     }
 
     document.querySelectorAll('.tab-btn').forEach(btn => { btn.addEventListener('click', (e) => { e.preventDefault(); const tabId = btn.dataset.tab; const pageNumber = btn.dataset.page; cambiarPestana(tabId, pageNumber); }); });
@@ -4433,6 +5028,7 @@ camposTexto.forEach(id => {
             const nombres = { solicitante: 'Solicitante', contraloria: 'Contraloría', auditoria: 'Auditoría', 'control-interno': 'Administrador' };
             document.getElementById('perfilActivoNombre').innerText = nombres[perfilGuardado];
             document.getElementById('perfilActivoBar').style.display = 'flex';
+            actualizarVisibilidadBotonConfig();
             aplicarPermisosPorPerfil();
             ocultarModalPerfil();
         } else { mostrarModalPerfil(); }
@@ -4462,6 +5058,9 @@ camposTexto.forEach(id => {
     loadFromStorage();
     limpiarFormularioCompleto();
     preguntarExportarAlInicio();
+    // Ajuste inicial de textareas por si hay datos cargados
+    setTimeout(forzarAjusteTextareas, 300);
+    setTimeout(forzarAjusteTextareas, 800);
 
 </script>
 </body>
